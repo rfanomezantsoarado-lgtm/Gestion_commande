@@ -34,11 +34,20 @@ jobs:
           pip install --upgrade pip setuptools wheel cython
           pip install buildozer
 
+      - name: Configure buildozer
+        run: |
+          # Forcer l'utilisation d'une version spécifique du NDK
+          buildozer init
+          sed -i 's/android.ndk = .*/android.ndk = 23b/' buildozer.spec
+          sed -i 's/android.api = .*/android.api = 33/' buildozer.spec
+          sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec
+
       - name: Build APK
         run: |
+          # Nettoyer le cache avant la construction
+          rm -rf .buildozer
           yes | buildozer -v android debug
 
-      # ⬇️⬇️⬇️ AJOUTEZ CES 5 LIGNES ⬇️⬇️⬇️
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
