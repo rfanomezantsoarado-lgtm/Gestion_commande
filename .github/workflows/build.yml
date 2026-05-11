@@ -21,13 +21,7 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt update
-          sudo apt install -y \
-            git zip unzip openjdk-17-jdk \
-            autoconf automake libtool pkg-config \
-            build-essential cmake \
-            libffi-dev libssl-dev \
-            libltdl-dev \
-            zlib1g-dev
+          sudo apt install -y git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config build-essential cmake libffi-dev libssl-dev libltdl-dev zlib1g-dev
 
       - name: Install Python tools
         run: |
@@ -39,57 +33,42 @@ jobs:
           rm -rf .buildozer
           rm -rf bin
 
-      - name: Create custom buildozer.spec
+      - name: Create fresh buildozer.spec
         run: |
           cat > buildozer.spec << 'EOF'
-[app]
-
-title = Gestion commande EN
-package.name = gestion_commande_en
-package.domain = org.en
-
-source.dir = .
-source.include_exts = py,png,jpg,kv,ttf,db
-
-version = 0.1
-
-requirements = python3,kivy,reportlab,pyjnius
-
-orientation = portrait
-
-android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
-
-# Configuration Android - Version stable
-android.api = 30
-android.minapi = 21
-android.ndk = 23b
-android.sdk = 30
-
-android.accept_sdk_license = True
-
-# Éviter d'utiliser les versions récentes du NDK
-android.ndk_path = 
-
-fullscreen = 0
-
-# Log level for debugging
-log_level = 2
-
-# Supported architectures
-android.archs = armeabi-v7a
-
-# Disable gradle (use older ant build)
-android.gradle = False
-EOF
-
-      - name: Display buildozer.spec
-        run: cat buildozer.spec
+          [app]
+          
+          title = Gestion commande EN
+          package.name = gestion_commande_en
+          package.domain = org.en
+          
+          source.dir = .
+          source.include_exts = py,png,jpg,kv,ttf,db
+          
+          version = 0.1
+          
+          requirements = python3,kivy
+          
+          orientation = portrait
+          
+          android.permissions = INTERNET
+          
+          android.api = 30
+          android.minapi = 21
+          android.ndk = 23b
+          android.sdk = 30
+          
+          android.accept_sdk_license = True
+          
+          fullscreen = 0
+          
+          android.archs = armeabi-v7a
+          
+          android.gradle = False
+          EOF
 
       - name: Build APK
         run: |
-          # Forcer l'utilisation du NDK 23b
-          export ANDROID_NDK_VERSION=23b
-          export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r23b
           yes | buildozer -v android debug
 
       - name: Upload APK
