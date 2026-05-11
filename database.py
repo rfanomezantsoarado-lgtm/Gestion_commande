@@ -1,94 +1,161 @@
 # database.py
-import sqlite3
 import os
+import sqlite3
 import json
+from kivy.utils import platform
 
-DB_NAME = "gestion_clients.db"
+# ===================================================
+# CONFIGURATION DU CHEMIN DE BASE DE DONNEES
+# ===================================================
+
+# Determiner le chemin de la base de donnees selon la plateforme
+if platform == 'android':
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        context = PythonActivity.mActivity
+        # Obtenir le repertoire de fichiers prives de l'application
+        files_dir = context.getFilesDir().getAbsolutePath()
+        DB_PATH = os.path.join(str(files_dir), "gestion_clients.db")
+        print(f"Base de donnees Android : {DB_PATH}")
+    except Exception as e:
+        print(f"Erreur chemin Android: {e}, utilisation du stockage externe")
+        DB_PATH = os.path.join("/sdcard", "gestion_clients.db")
+else:
+    DB_NAME = "gestion_clients.db"
+    DB_PATH = DB_NAME
+    print(f"Base de donnees locale : {DB_PATH}")
+
+
+# ===================================================
+# INITIALISATION DE LA BASE DE DONNEES
+# ===================================================
 
 def init_database():
-    """Initialise la base de données et crée les tables si elles n'existent pas"""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    """Initialise la base de donnees et cree les tables si elles n'existent pas"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
 
-    # Table clients
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL,
-            adresse TEXT,
-            nif TEXT,
-            stat TEXT,
-            contact TEXT,
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+        # Table clients
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                adresse TEXT,
+                nif TEXT,
+                stat TEXT,
+                contact TEXT,
+                date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
-    # Table produits
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS produits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL,
-            prix_achat TEXT,
-            prix_vente TEXT,
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+        # Table produits
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS produits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                prix_achat TEXT,
+                prix_vente TEXT,
+                date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
-    # Table commandes avec la colonne numero_cheque
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS commandes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_nom TEXT NOT NULL,
-            produits TEXT,
-            total REAL,
-            avance REAL,
-            reste REAL,
-            mode_paiement TEXT DEFAULT 'Espèce',
-            numero_cheque TEXT,
-            date_commande TEXT,
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+        # Table commandes avec la colonne numero_cheque
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS commandes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_nom TEXT NOT NULL,
+                produits TEXT,
+                total REAL,
+                avance REAL,
+                reste REAL,
+                mode_paiement TEXT DEFAULT 'Espece',
+                numero_cheque TEXT,
+                date_commande TEXT,
+                date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
 
-    # Appliquer la migration pour les bases existantes
-    migrer_ajouter_colonne_numero_cheque()
+        # Appliquer les migrations necessaires
+        migrer_ajouter_colonne_numero_cheque()
+        ajouter_colonne_mode_paiement()
 
-    return True
+        print("Base de donnees initialisee avec succes")
+        return True
+
+    except Exception as e:
+        print(f"Erreur lors de l'initialisation de la base de donnees: {e}")
+        return False
+
+
+# ===================================================
+# FONCTIONS DE MIGRATION
+# ===================================================
 
 def ajouter_colonne_mode_paiement():
     """Ajoute la colonne mode_paiement si elle n'existe pas (migration)"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # Vérifier si la colonne existe
+        # Verifier si la colonne existe
         cursor.execute("PRAGMA table_info(commandes)")
         columns = [column[1] for column in cursor.fetchall()]
 
         if 'mode_paiement' not in columns:
             print("Ajout de la colonne 'mode_paiement'...")
-            cursor.execute("ALTER TABLE commandes ADD COLUMN mode_paiement TEXT DEFAULT 'Espèce'")
+            cursor.execute("ALTER TABLE commandes ADD COLUMN mode_paiement TEXT DEFAULT 'Espece'")
             conn.commit()
-            print("✅ Colonne 'mode_paiement' ajoutée avec succès")
+            print("Colonne 'mode_paiement' ajoutee avec succes")
 
-        # Mettre à jour les valeurs NULL
-        cursor.execute("UPDATE commandes SET mode_paiement = 'Espèce' WHERE mode_paiement IS NULL")
+        # Mettre a jour les valeurs NULL
+        cursor.execute("UPDATE commandes SET mode_paiement = 'Espece' WHERE mode_paiement IS NULL")
         conn.commit()
 
         conn.close()
         return True
     except Exception as e:
-        print(f"Erreur lors de la migration: {e}")
+        print(f"Erreur lors de la migration mode_paiement: {e}")
         return False
 
-# ============ FONCTIONS POUR CLIENTS ============
-def ajouter_client_db(nom, adresse, nif, stat, contact):
-    """Ajoute un nouveau client dans la base de données"""
+
+def migrer_ajouter_colonne_numero_cheque():
+    """Ajoute la colonne numero_cheque a la table commandes si elle n'existe pas"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # Verifier si la colonne existe
+        cursor.execute("PRAGMA table_info(commandes)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'numero_cheque' not in columns:
+            print("Ajout de la colonne 'numero_cheque'...")
+            cursor.execute("ALTER TABLE commandes ADD COLUMN numero_cheque TEXT")
+            conn.commit()
+            print("Colonne 'numero_cheque' ajoutee avec succes")
+        else:
+            print("La colonne 'numero_cheque' existe deja")
+
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Erreur lors de la migration numero_cheque: {e}")
+        return False
+
+
+# ===================================================
+# FONCTIONS POUR CLIENTS
+# ===================================================
+
+def ajouter_client_db(nom, adresse, nif, stat, contact):
+    """Ajoute un nouveau client dans la base de donnees"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -104,10 +171,11 @@ def ajouter_client_db(nom, adresse, nif, stat, contact):
         print(f"Erreur lors de l'ajout du client: {e}")
         return None
 
+
 def get_all_clients():
-    """Récupère tous les clients de la base de données"""
+    """Recupere tous les clients de la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT nom, adresse, nif, stat, contact FROM clients ORDER BY id DESC')
@@ -116,13 +184,14 @@ def get_all_clients():
         conn.close()
         return clients
     except Exception as e:
-        print(f"Erreur lors de la récupération des clients: {e}")
+        print(f"Erreur lors de la recuperation des clients: {e}")
         return []
 
+
 def supprimer_client_db(client_id):
-    """Supprime un client de la base de données"""
+    """Supprime un client de la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('DELETE FROM clients WHERE id = ?', (client_id,))
@@ -134,10 +203,11 @@ def supprimer_client_db(client_id):
         print(f"Erreur lors de la suppression du client: {e}")
         return False
 
+
 def get_clients_count():
-    """Récupère le nombre total de clients"""
+    """Recupere le nombre total de clients"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT COUNT(*) FROM clients')
@@ -149,11 +219,15 @@ def get_clients_count():
         print(f"Erreur lors du comptage des clients: {e}")
         return 0
 
-# ============ FONCTIONS POUR PRODUITS ============
+
+# ===================================================
+# FONCTIONS POUR PRODUITS
+# ===================================================
+
 def ajouter_produit_db(nom, prix_achat, prix_vente):
-    """Ajoute un nouveau produit dans la base de données"""
+    """Ajoute un nouveau produit dans la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -169,10 +243,11 @@ def ajouter_produit_db(nom, prix_achat, prix_vente):
         print(f"Erreur lors de l'ajout du produit: {e}")
         return None
 
+
 def get_all_produits():
-    """Récupère tous les produits de la base de données"""
+    """Recupere tous les produits de la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT nom, prix_achat, prix_vente FROM produits ORDER BY id DESC')
@@ -181,13 +256,14 @@ def get_all_produits():
         conn.close()
         return produits
     except Exception as e:
-        print(f"Erreur lors de la récupération des produits: {e}")
+        print(f"Erreur lors de la recuperation des produits: {e}")
         return []
 
+
 def supprimer_produit_db(produit_id):
-    """Supprime un produit de la base de données"""
+    """Supprime un produit de la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('DELETE FROM produits WHERE id = ?', (produit_id,))
@@ -199,10 +275,11 @@ def supprimer_produit_db(produit_id):
         print(f"Erreur lors de la suppression du produit: {e}")
         return False
 
+
 def get_produits_count():
-    """Récupère le nombre total de produits"""
+    """Recupere le nombre total de produits"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT COUNT(*) FROM produits')
@@ -214,13 +291,16 @@ def get_produits_count():
         print(f"Erreur lors du comptage des produits: {e}")
         return 0
 
-# ============ FONCTIONS POUR COMMANDES ============
-# Version avec paramètres nommés (plus sûre)
+
+# ===================================================
+# FONCTIONS POUR COMMANDES
+# ===================================================
+
 def ajouter_commande_db(client_nom=None, produits=None, total=None, avance=None,
                          reste=None, mode_paiement=None, numero_cheque=None, date=None):
-    """Ajoute une nouvelle commande dans la base de données"""
+    """Ajoute une nouvelle commande dans la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         produits_json = json.dumps(produits, ensure_ascii=False) if produits else "[]"
@@ -238,26 +318,27 @@ def ajouter_commande_db(client_nom=None, produits=None, total=None, avance=None,
         print(f"Erreur ajout commande: {e}")
         return None
 
+
 def get_all_commandes():
-    """Récupère toutes les commandes"""
+    """Recupere toutes les commandes"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # Inclure mode_paiement dans la sélection
         cursor.execute('SELECT id, client_nom, total, avance, reste, mode_paiement, date_commande FROM commandes ORDER BY id DESC')
         commandes = cursor.fetchall()
 
         conn.close()
         return commandes
     except Exception as e:
-        print(f"Erreur lors de la récupération des commandes: {e}")
+        print(f"Erreur lors de la recuperation des commandes: {e}")
         return []
 
+
 def get_commandes_client(client_nom):
-    """Récupère toutes les commandes d'un client spécifique"""
+    """Recupere toutes les commandes d'un client specifique"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -271,13 +352,14 @@ def get_commandes_client(client_nom):
         conn.close()
         return commandes
     except Exception as e:
-        print(f"Erreur lors de la récupération des commandes du client: {e}")
+        print(f"Erreur lors de la recuperation des commandes du client: {e}")
         return []
 
+
 def get_commande_by_id(commande_id):
-    """Récupère une commande spécifique par son ID"""
+    """Recupere une commande specifique par son ID"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -290,7 +372,6 @@ def get_commande_by_id(commande_id):
         conn.close()
 
         if commande:
-            # Convertir le JSON des produits en liste Python
             produits = json.loads(commande[2]) if commande[2] else []
             return {
                 'id': commande[0],
@@ -304,13 +385,14 @@ def get_commande_by_id(commande_id):
             }
         return None
     except Exception as e:
-        print(f"Erreur lors de la récupération de la commande: {e}")
+        print(f"Erreur lors de la recuperation de la commande: {e}")
         return None
 
+
 def supprimer_commande_db(commande_id):
-    """Supprime une commande de la base de données"""
+    """Supprime une commande de la base de donnees"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('DELETE FROM commandes WHERE id = ?', (commande_id,))
@@ -322,10 +404,11 @@ def supprimer_commande_db(commande_id):
         print(f"Erreur lors de la suppression de la commande: {e}")
         return False
 
+
 def get_commandes_count():
-    """Récupère le nombre total de commandes"""
+    """Recupere le nombre total de commandes"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT COUNT(*) FROM commandes')
@@ -337,10 +420,11 @@ def get_commandes_count():
         print(f"Erreur lors du comptage des commandes: {e}")
         return 0
 
+
 def get_commandes_count_by_client(client_nom):
-    """Récupère le nombre de commandes pour un client spécifique"""
+    """Recupere le nombre de commandes pour un client specifique"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT COUNT(*) FROM commandes WHERE client_nom = ?', (client_nom,))
@@ -352,10 +436,11 @@ def get_commandes_count_by_client(client_nom):
         print(f"Erreur lors du comptage des commandes du client: {e}")
         return 0
 
+
 def payer_reste_db(commande_id, montant_paye, nouveau_reste):
-    """Met à jour le paiement d'une commande"""
+    """Met a jour le paiement d'une commande"""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE commandes
@@ -367,50 +452,4 @@ def payer_reste_db(commande_id, montant_paye, nouveau_reste):
         return True
     except Exception as e:
         print(f"Erreur payer_reste_db: {e}")
-        return False
-
-def ajouter_colonne_numero_cheque():
-    """Ajoute la colonne numero_cheque si elle n'existe pas"""
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-
-        cursor.execute("PRAGMA table_info(commandes)")
-        columns = [column[1] for column in cursor.fetchall()]
-
-        if 'numero_cheque' not in columns:
-            print("Ajout de la colonne 'numero_cheque'...")
-            cursor.execute("ALTER TABLE commandes ADD COLUMN numero_cheque TEXT")
-            conn.commit()
-            print("Colonne 'numero_cheque' ajoutée avec succès")
-
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"Erreur lors de la migration: {e}")
-        return False
-
-
-def migrer_ajouter_colonne_numero_cheque():
-    """Ajoute la colonne numero_cheque à la table commandes si elle n'existe pas"""
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-
-        # Vérifier si la colonne existe
-        cursor.execute("PRAGMA table_info(commandes)")
-        columns = [column[1] for column in cursor.fetchall()]
-
-        if 'numero_cheque' not in columns:
-            print("Ajout de la colonne 'numero_cheque'...")
-            cursor.execute("ALTER TABLE commandes ADD COLUMN numero_cheque TEXT")
-            conn.commit()
-            print("✅ Colonne 'numero_cheque' ajoutée avec succès")
-        else:
-            print("ℹ️ La colonne 'numero_cheque' existe déjà")
-
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"Erreur lors de la migration: {e}")
         return False
