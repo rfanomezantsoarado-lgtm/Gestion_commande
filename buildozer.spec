@@ -21,12 +21,6 @@ orientation = portrait
 # Permissions
 android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
-# Android SDK/NDK Configuration
-android.api = 33
-android.minapi = 21
-android.ndk = 23b
-android.sdk = 33
-
 # Accept SDK license
 android.accept_sdk_license = True
 
